@@ -74,7 +74,7 @@ namespace BananaRun.Runner
 
         private string GetSlideStatus(RunnerPlayer player)
         {
-            if (player.IsSliding)
+            if (player._isSliding)
             {
                 return "🏃‍♂️ 슬라이딩 중 (🟢초록 장애물 통과 가능)";
             }

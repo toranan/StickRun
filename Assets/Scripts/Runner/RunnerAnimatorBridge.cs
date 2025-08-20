@@ -18,10 +18,11 @@ namespace BananaRun.Runner
         public bool lockModelRotation = true;
 
         [Header("Animator Parameters")]
-        public string runBoolParam = "Run";
-        public string speedFloatParam = "Speed"; // 선택
-        public string jumpTriggerParam = "Jump";
-        public string slideBoolParam = "Roll";
+        public string runBoolParam = "Run"; // Keep for reference, but won't be set by this script
+        public string speedFloatParam = "Speed";
+        public string jumpTriggerParam = "Jump"; // Keep for reference, but won't be set by this script
+        public string slideBoolParam = "Roll"; // Keep for reference, but won't be set by this script
+        public string glideBoolParam = "IsGliding"; // Added for glide control
         public string dieTriggerParam = "Die";
         public float runAnimSpeedMultiplier = 0.1f;
 
@@ -53,24 +54,18 @@ namespace BananaRun.Runner
 
         private void OnEnable()
         {
-            if (swipeInput != null)
-            {
-                swipeInput.OnSwipeUp += HandleJump;
-            }
+            // Removed: swipeInput.OnSwipeUp += HandleJump; (Jump is now handled by RunnerPlayer)
         }
 
         private void OnDisable()
         {
-            if (swipeInput != null)
-            {
-                swipeInput.OnSwipeUp -= HandleJump;
-            }
+            // Removed: swipeInput.OnSwipeUp -= HandleJump; (Jump is now handled by RunnerPlayer)
         }
 
         private void Start()
         {
-            // 시작 시 달리기 상태로
-            SetBool(runBoolParam, true);
+            // 시작 시 달리기 상태로 (This should be handled by Animator's default state or transitions)
+            // SetBool(runBoolParam, true);
             SetFloat(speedFloatParam, (runner != null ? runner.forwardSpeed : 8f) * runAnimSpeedMultiplier);
         }
 
@@ -78,12 +73,15 @@ namespace BananaRun.Runner
         {
             if (animator == null || runner == null) return;
 
-            // 달리기/속도 동기화
-            SetBool(runBoolParam, !runner.isDead);
+            // 달리기/속도 동기화 (Only set speed, run bool should be handled by Animator transitions)
+            // SetBool(runBoolParam, !runner.isDead); // Removed: Conflicting with Animator transitions
             SetFloat(speedFloatParam, runner.forwardSpeed * runAnimSpeedMultiplier);
 
             // 슬라이드 동기화
-            SetBool(slideBoolParam, runner.IsSliding);
+            SetBool(slideBoolParam, runner._isSliding); // Using public _isSliding
+
+            // 글라이드 동기화 (New)
+            SetBool(glideBoolParam, runner.IsGliding);
 
             // 사망 트리거
             if (!_prevDead && runner.isDead)
@@ -103,10 +101,7 @@ namespace BananaRun.Runner
             }
         }
 
-        private void HandleJump()
-        {
-            SetTrigger(jumpTriggerParam);
-        }
+        // Removed: private void HandleJump() (Jump is now handled by RunnerPlayer)
 
         private void SetBool(string name, bool value)
         {
@@ -127,5 +122,3 @@ namespace BananaRun.Runner
         }
     }
 }
-
-

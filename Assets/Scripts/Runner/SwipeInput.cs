@@ -18,15 +18,18 @@ namespace BananaRun.Runner
         [Tooltip("탭으로 간주할 최대 픽셀 이동 거리")]
         public float maxTapDistancePixels = 30f;
 
-
         public event Action OnSwipeUp;
         public event Action OnSwipeDown;
         public event Action OnSwipeLeft;
         public event Action OnSwipeRight;
+        
+        public event Action OnHoldStart;
+        public event Action OnHoldEnd;
 
         private Vector2 _startPos;
         private float _startTime;
         private bool _isInputStarted;
+        private bool _isHolding;
 
         private void Update()
         {
@@ -37,42 +40,63 @@ namespace BananaRun.Runner
         private void HandleTouch()
         {
 #if UNITY_IOS || UNITY_ANDROID || UNITY_EDITOR
-            if (Input.touchCount == 0)
+            if (Input.touchCount > 0)
             {
-                return;
-            }
+                Touch touch = Input.GetTouch(0);
 
-            Touch touch = Input.GetTouch(0);
-            if (touch.phase == TouchPhase.Began)
-            {
-                _isInputStarted = true;
-                _startPos = touch.position;
-                _startTime = Time.time;
-            }
-            else if (_isInputStarted && (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled))
-            {
-                _isInputStarted = false;
-                float elapsed = Time.time - _startTime;
-                Vector2 delta = touch.position - _startPos;
-
-                // 탭 감지
-                if (elapsed <= maxTapTime && delta.magnitude < maxTapDistancePixels)
+                if (touch.phase == TouchPhase.Began)
                 {
-                    if (_startPos.x < Screen.width / 2)
+                    _isInputStarted = true;
+                    _startPos = touch.position;
+                    _startTime = Time.time;
+
+                    if (!_isHolding)
                     {
-                        Debug.Log("🟡 왼쪽 탭 감지");
-                        OnSwipeLeft?.Invoke();
-                    }
-                    else
-                    {
-                        Debug.Log("🟡 오른쪽 탭 감지");
-                        OnSwipeRight?.Invoke();
+                        _isHolding = true;
+                        OnHoldStart?.Invoke();
+                        Debug.Log("🟡 홀드 시작");
                     }
                 }
-                // 스와이프 감지
-                else if (elapsed <= maxSwipeTime && delta.magnitude >= minSwipeDistancePixels)
+                else if (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled)
                 {
-                    DetectSwipeDirection(delta);
+                    if (_isHolding)
+                    {
+                
+                        _isHolding = false;
+                        OnHoldEnd?.Invoke();
+                        Debug.Log("🟡 홀드 종료");
+                    }
+
+                    if (!_isInputStarted) return;
+                    _isInputStarted = false;
+
+                    float elapsed = Time.time - _startTime;
+                    Vector2 delta = touch.position - _startPos;
+
+                    if (elapsed <= maxTapTime && delta.magnitude < maxTapDistancePixels)
+                    {
+                        if (_startPos.x < Screen.width / 2)
+                        {
+                            OnSwipeLeft?.Invoke();
+                        }
+                        else
+                        {
+                            OnSwipeRight?.Invoke();
+                        }
+                    }
+                    else if (elapsed <= maxSwipeTime && delta.magnitude >= minSwipeDistancePixels)
+                    {
+                        DetectSwipeDirection(delta);
+                    }
+                }
+            }
+            else
+            {
+                if (_isHolding)
+                {
+                    _isHolding = false;
+                    OnHoldEnd?.Invoke();
+                    Debug.Log("🟡 홀드 종료 (터치 없음)");
                 }
             }
 #endif
@@ -81,7 +105,6 @@ namespace BananaRun.Runner
         private void HandleEditorSimulation()
         {
 #if ENABLE_INPUT_SYSTEM
-            // 새 입력 시스템 우선 사용
             var keyboard = UnityEngine.InputSystem.Keyboard.current;
             if (keyboard != null)
             {
@@ -89,9 +112,28 @@ namespace BananaRun.Runner
                 if (keyboard.downArrowKey.wasPressedThisFrame || keyboard.sKey.wasPressedThisFrame) OnSwipeDown?.Invoke();
                 if (keyboard.leftArrowKey.wasPressedThisFrame || keyboard.aKey.wasPressedThisFrame) OnSwipeLeft?.Invoke();
                 if (keyboard.rightArrowKey.wasPressedThisFrame || keyboard.dKey.wasPressedThisFrame) OnSwipeRight?.Invoke();
+
+                // New: Spacebar hold for glide (New Input System)
+                if (keyboard.spaceKey.isPressed)
+                {
+                    if (!_isHolding && Input.touchCount == 0)
+                    {
+                        _isHolding = true;
+                        OnHoldStart?.Invoke();
+                        Debug.Log("🟡 스페이스바 홀드 시작 (New Input System)");
+                    }
+                }
+                else
+                {
+                    if (_isHolding && Input.touchCount == 0)
+                    {
+                        _isHolding = false;
+                        OnHoldEnd?.Invoke();
+                        Debug.Log("🟡 스페이스바 홀드 종료 (New Input System)");
+                    }
+                }
             }
 #elif UNITY_EDITOR || UNITY_STANDALONE
-            // 새 입력 시스템이 없을 때만 구 입력 처리
             if (Input.GetKeyDown(KeyCode.UpArrow)) OnSwipeUp?.Invoke();
             if (Input.GetKeyDown(KeyCode.DownArrow)) OnSwipeDown?.Invoke();
             if (Input.GetKeyDown(KeyCode.LeftArrow)) OnSwipeLeft?.Invoke();
@@ -100,6 +142,26 @@ namespace BananaRun.Runner
             if (Input.GetKeyDown(KeyCode.S)) OnSwipeDown?.Invoke();
             if (Input.GetKeyDown(KeyCode.A)) OnSwipeLeft?.Invoke();
             if (Input.GetKeyDown(KeyCode.D)) OnSwipeRight?.Invoke();
+
+            // New: Spacebar hold for glide (Old Input System)
+            if (Input.GetKey(KeyCode.Space))
+            {
+                if (!_isHolding && Input.touchCount == 0)
+                {
+                    _isHolding = true;
+                    OnHoldStart?.Invoke();
+                    Debug.Log("🟡 스페이스바 홀드 시작 (Old Input System)");
+                }
+            }
+            else
+            {
+                if (_isHolding && Input.touchCount == 0)
+                {
+                    _isHolding = false;
+                    OnHoldEnd?.Invoke();
+                    Debug.Log("🟡 스페이스바 홀드 종료 (Old Input System)");
+                }
+            }
 #endif
         }
 
@@ -107,24 +169,21 @@ namespace BananaRun.Runner
         {
             if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
             {
-                // Horizontal swipes are now ignored
+                // Horizontal swipes are ignored
             }
             else
             {
-                if (delta.y > 0f) 
+                if (delta.y > 0f)
                 {
-                    Debug.Log("🟡 위쪽 스와이프 감지 → 점프");
-                    OnSwipeUp?.Invoke(); 
+                    OnSwipeUp?.Invoke();
                 }
-                else 
+                else
                 {
-                    Debug.Log("🟡 아래쪽 스와이프 감지 → 슬라이드");
                     OnSwipeDown?.Invoke();
                 }
             }
         }
 
-        // 디버그/외부 호출용 메서드들
         public void TriggerSwipeLeft() => OnSwipeLeft?.Invoke();
         public void TriggerSwipeRight() => OnSwipeRight?.Invoke();
         public void TriggerSwipeUp() => OnSwipeUp?.Invoke();

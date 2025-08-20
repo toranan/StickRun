@@ -21,6 +21,10 @@ namespace BananaRun.Runner
         [Tooltip("공중 점프의 높이 배율 (1 = 지상 점프와 동일)")]
         public float airJumpHeightMultiplier = 1f;
 
+        [Header("Glide Settings")]
+        [Tooltip("글라이딩 시 중력 감소 배율 (0~1, 0에 가까울수록 천천히 떨어짐)")]
+        [Range(0f, 1f)] public float glideGravityMultiplier = 0.2f;
+
         [Header("References")]
         public SwipeInput swipeInput;
         
@@ -31,17 +35,22 @@ namespace BananaRun.Runner
         private CharacterController _controller;
         private int _currentLaneIndex = 1; // 가운데에서 시작
         private float _verticalVelocity;
-        private bool _isSliding;
+        public bool _isSliding; // Changed to public for RunnerAnimatorBridge
         private float _slideEndTime;
         public bool isDead;
         
+        public bool IsGliding { get; private set; } = false; // Changed to public property
+        private float _normalGravity;
+
         // 디버그용 프로퍼티
         public int CurrentLaneIndex => _currentLaneIndex;
-        public bool IsSliding => _isSliding;
+        // public bool IsSliding => _isSliding; // No longer needed as _isSliding is public
 
         private float _originalHeight;
         private Vector3 _originalCenter;
         private int _remainingAirJumps;
+
+        private Animator _animator; // 애니메이터 참조 추가
 
         private void Awake()
         {
@@ -50,6 +59,7 @@ namespace BananaRun.Runner
             {
                 swipeInput = GetComponentInChildren<SwipeInput>();
             }
+            _animator = GetComponent<Animator>(); // 애니메이터 컴포넌트 가져오기
 
             _originalHeight = _controller.height;
             _originalCenter = _controller.center;
@@ -60,6 +70,7 @@ namespace BananaRun.Runner
             }
             isDead = false;
             _remainingAirJumps = maxAirJumps;
+            _normalGravity = gravity; // 초기 중력 값 저장
             
             Debug.Log($"무한 러너 시작! 현재 레인: {_currentLaneIndex + 1} (1-3레인 중), 속도: {forwardSpeed}");
         }
@@ -79,6 +90,8 @@ namespace BananaRun.Runner
                 swipeInput.OnSwipeRight += HandleSwipeRight;
                 swipeInput.OnSwipeUp += HandleSwipeUp;
                 swipeInput.OnSwipeDown += HandleSwipeDown;
+                swipeInput.OnHoldStart += HandleHoldStart;
+                swipeInput.OnHoldEnd += HandleHoldEnd;
             }
         }
 
@@ -90,11 +103,19 @@ namespace BananaRun.Runner
                 swipeInput.OnSwipeRight -= HandleSwipeRight;
                 swipeInput.OnSwipeUp -= HandleSwipeUp;
                 swipeInput.OnSwipeDown -= HandleSwipeDown;
+                swipeInput.OnHoldStart -= HandleHoldStart;
+                swipeInput.OnHoldEnd -= HandleHoldEnd;
             }
         }
 
         private void Update()
         {
+            // 게임이 플레이 중이 아니면 아무것도 하지 않음
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing)
+            {
+                return;
+            }
+
             if (!isDead && forwardSpeed <= 0.01f)
             {
                 forwardSpeed = 8f; // 씬 세팅 누락 시 자동 복구
@@ -107,15 +128,16 @@ namespace BananaRun.Runner
 
             // 중력/점프
             bool grounded = _controller.isGrounded;
-            if (grounded && _verticalVelocity < 0f)
-            {
-                _verticalVelocity = -2f; // 바닥에 붙이기
-            }
             if (grounded)
             {
+                if (_verticalVelocity < 0f) _verticalVelocity = -2f; // 바닥에 붙이기
+                if (IsGliding) EndGlide(); // 땅에 닿으면 글라이딩 종료
                 _remainingAirJumps = maxAirJumps;
             }
-            _verticalVelocity += gravity * Time.deltaTime;
+            
+            // 글라이딩 중이면 중력 감소
+            float currentGravity = IsGliding ? _normalGravity * glideGravityMultiplier : _normalGravity;
+            _verticalVelocity += currentGravity * Time.deltaTime;
 
             // 최종 이동: 좌우 + 중력만 (Z는 제자리, 월드가 뒤로 이동)
             Vector3 displacement = new Vector3(
@@ -199,25 +221,13 @@ namespace BananaRun.Runner
             Debug.Log($"💀 {deathReason}: {collider.name}. Game Over.");
         }
 
-        // 기존 OnControllerColliderHit는 로깅만 (정확한 충돌 판정 비활성화)
-        private void OnControllerColliderHit(ControllerColliderHit hit)
-        {
-            // 로깅만 수행 (실제 충돌 판정은 CheckPreciseCollision에서)
-            if (hit.collider != null && hit.collider.GetComponent<Obstacle>() != null)
-            {
-                Debug.Log($"🟡 OnControllerColliderHit 감지: {hit.collider.name} (무시됨 - 정밀 판정 사용)");
-            }
-        }
-
         private bool CanSlideUnderObstacle(Obstacle obstacle)
         {
-            // 장애물 높이 확인
             float obstacleHeight = obstacle.size.y;
             float slideHeight = _originalHeight * slideHeightScale;
             
-            // 슬라이딩 높이보다 충분히 높은 장애물이면 통과 가능
-            float clearanceNeeded = slideHeight + 0.2f; // 여유 공간 0.2m
-            bool canSlide = obstacleHeight <= clearanceNeeded || obstacleHeight <= 1.3f; // 1.3m 이하는 무조건 통과
+            float clearanceNeeded = slideHeight + 0.2f;
+            bool canSlide = obstacleHeight <= clearanceNeeded || obstacleHeight <= 1.3f;
             
             Debug.Log($"🔍 슬라이딩 판정: 장애물 높이 {obstacleHeight:F1}m, 필요 높이 {clearanceNeeded:F1}m → {(canSlide ? "통과 가능" : "충돌")}");
             return canSlide;
@@ -225,7 +235,9 @@ namespace BananaRun.Runner
 
         private void HandleSwipeLeft()
         {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
             if (isDead) return;
+            if (IsGliding) EndGlide(); // 글라이딩 중 좌우 이동 시 글라이딩 종료
             
             int previousLane = _currentLaneIndex;
             _currentLaneIndex = Mathf.Max(0, _currentLaneIndex - 1);
@@ -242,7 +254,9 @@ namespace BananaRun.Runner
 
         private void HandleSwipeRight()
         {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
             if (isDead) return;
+            if (IsGliding) EndGlide(); // 글라이딩 중 좌우 이동 시 글라이딩 종료
             
             int previousLane = _currentLaneIndex;
             _currentLaneIndex = Mathf.Min(laneCount - 1, _currentLaneIndex + 1);
@@ -259,11 +273,12 @@ namespace BananaRun.Runner
 
         private void HandleSwipeUp()
         {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
             if (isDead) return;
+            if (IsGliding) EndGlide(); // 점프 시 글라이딩 종료
             
             if (_controller.isGrounded)
             {
-                // v^2 = 2gh -> v = sqrt(2gh)
                 _verticalVelocity = Mathf.Sqrt(jumpHeight * -2f * gravity);
                 if (_isSliding) EndSlide();
                 Debug.Log("점프!");
@@ -279,13 +294,46 @@ namespace BananaRun.Runner
 
         private void HandleSwipeDown()
         {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
             if (isDead) return;
+            if (IsGliding) EndGlide(); // 슬라이드 시 글라이딩 종료
             
             if (!_isSliding)
             {
                 StartSlide();
                 Debug.Log("롤!");
             }
+        }
+
+        private void HandleHoldStart()
+        {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
+            if (isDead) return;
+            // 공중에 있고, 슬라이딩 중이 아니며, 이미 글라이딩 중이 아닐 때만 글라이딩 시작
+            if (!_controller.isGrounded && !_isSliding && !IsGliding)
+            {
+                StartGlide();
+            }
+        }
+
+        private void HandleHoldEnd()
+        {
+            if (GameManager.Instance != null && GameManager.Instance.currentGameState != GameManager.GameState.Playing) return;
+            EndGlide();
+        }
+
+        private void StartGlide()
+        {
+            IsGliding = true;
+            // Removed: if (_animator != null) _animator.SetBool("IsGliding", true);
+            Debug.Log("🚀 글라이딩 시작!");
+        }
+
+        private void EndGlide()
+        {
+            IsGliding = false;
+            // Removed: if (_animator != null) _animator.SetBool("IsGliding", false);
+            Debug.Log("🚀 글라이딩 종료!");
         }
 
         private void StartSlide()
@@ -304,12 +352,11 @@ namespace BananaRun.Runner
             _controller.center = _originalCenter;
         }
 
-        // 충돌 범위 시각적 디버깅
         private void OnDrawGizmos()
         {
             if (!showCollisionDebug || _controller == null) return;
 
-            float radius = _controller.radius * 0.9f; // 실제 충돌 판정에 사용하는 크기
+            float radius = _controller.radius * 0.9f;
             float height = _controller.height;
             Vector3 centerWorld = transform.TransformPoint(_controller.center);
 
@@ -317,14 +364,11 @@ namespace BananaRun.Runner
             Vector3 bottom = centerWorld - up * (height * 0.5f - radius);
             Vector3 top = centerWorld + up * (height * 0.5f - radius);
 
-            // 충돌 판정 캡슐 표시
             Gizmos.color = isDead ? Color.red : (_isSliding ? Color.green : Color.yellow);
             
-            // 캡슐의 원형 부분들
             Gizmos.DrawWireSphere(bottom, radius);
             Gizmos.DrawWireSphere(top, radius);
             
-            // 캡슐의 측면 라인들
             Vector3[] directions = { Vector3.forward, Vector3.back, Vector3.left, Vector3.right };
             foreach (var dir in directions)
             {
@@ -332,11 +376,8 @@ namespace BananaRun.Runner
                 Gizmos.DrawLine(bottom + offset, top + offset);
             }
 
-            // 중심점 표시
             Gizmos.color = Color.white;
             Gizmos.DrawWireCube(centerWorld, Vector3.one * 0.1f);
         }
     }
 }
-
-
