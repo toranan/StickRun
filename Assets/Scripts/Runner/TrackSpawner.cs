@@ -16,10 +16,20 @@ namespace BananaRun.Runner
 
         [Header("Runtime Settings")]
         public float spawnAheadDistance = 1000f; // 더 멀리까지 생성
+        
+        [Header("Gap Settings")]
+        public bool enableGaps = false;
+        public float gapChance = 0.12f;
+        public Vector2 gapLengthRange = new Vector2(0.8f, 1.6f);
+        public int minSegmentsBetweenGaps = 2;
+        public float gapSafeZoneDistance = 40f;
 
         private readonly List<GameObject> _segments = new List<GameObject>();
         private float _nextSpawnZ;
         private float _virtualPlayerDistance = 0f;
+        private int _segmentsSinceLastGap = 0;
+        private bool _inGap = false;
+        private float _currentGapEnd = 0f;
 
         private void Start()
         {
@@ -80,8 +90,23 @@ namespace BananaRun.Runner
             int spawnCount = 0;
             while (_nextSpawnZ < targetZ)
             {
+                // Gap 로직 처리
+                if (enableGaps && ShouldCreateGap())
+                {
+                    CreateGap();
+                }
+                else if (_inGap && _nextSpawnZ >= _currentGapEnd)
+                {
+                    EndGap();
+                }
+
+                if (!_inGap)
+                {
+                    SpawnSegment(_nextSpawnZ - segmentLength * 0.5f);
+                    _segmentsSinceLastGap++;
+                }
+
                 _nextSpawnZ += segmentLength;
-                SpawnSegment(_nextSpawnZ - segmentLength * 0.5f);
                 spawnCount++;
                 
                 if (spawnCount > 20) 
@@ -124,6 +149,46 @@ namespace BananaRun.Runner
                     Object.Destroy(c);
                 }
             }
+        }
+
+        private bool ShouldCreateGap()
+        {
+            // 플레이어가 안전 거리 내에 있으면 gap 생성하지 않음
+            if (_virtualPlayerDistance + gapSafeZoneDistance > _nextSpawnZ)
+            {
+                return false;
+            }
+
+            // 최소 세그먼트 수를 충족하지 않으면 gap 생성하지 않음
+            if (_segmentsSinceLastGap < minSegmentsBetweenGaps)
+            {
+                return false;
+            }
+
+            // 이미 gap 중이면 생성하지 않음
+            if (_inGap)
+            {
+                return false;
+            }
+
+            // 확률적으로 gap 생성 결정
+            return Random.value < gapChance;
+        }
+
+        private void CreateGap()
+        {
+            _inGap = true;
+            float gapLength = Random.Range(gapLengthRange.x, gapLengthRange.y);
+            _currentGapEnd = _nextSpawnZ + gapLength;
+            _segmentsSinceLastGap = 0;
+            
+            Debug.Log($"Gap 생성: {_nextSpawnZ:F1} ~ {_currentGapEnd:F1} (길이: {gapLength:F1})");
+        }
+
+        private void EndGap()
+        {
+            _inGap = false;
+            Debug.Log($"Gap 종료: {_nextSpawnZ:F1}");
         }
     }
 }
