@@ -6,7 +6,7 @@ namespace BananaRun.Runner
     public class RunnerPlayer : MonoBehaviour
     {
         [Header("Movement Settings")]
-        public float forwardSpeed = 8f; // z+ 방향으로 계속 전진
+        public float forwardSpeed = 12f; // z+ 방향으로 계속 전진
         public float laneOffset = 2f;   // 레인 간격
         public int laneCount = 3;       // 3레인 (0,1,2)
         public float laneChangeSpeed = 18f; // 레인 이동을 더 빠르고 명확하게

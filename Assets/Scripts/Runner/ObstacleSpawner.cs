@@ -11,8 +11,8 @@ namespace BananaRun.Runner
         [Header("Spawn Distances (Z)")]
         public float spawnAheadDistance = 500f; // 무한 생성을 위해 매우 멀리까지
         public float despawnBehindDistance = 50f;
-        public float minGapZ = 3f; // 더 자주 생성
-        public float maxGapZ = 8f;
+        public float minGapZ = 5f; // 더 자주 생성
+        public float maxGapZ = 10f;
 
         [Header("Lanes")]
         public int laneCount = 3;
@@ -224,7 +224,7 @@ namespace BananaRun.Runner
             var renderer = obj.GetComponent<Renderer>();
             if (renderer != null)
             {
-                renderer.sharedMaterial.color = obstacleColor;
+                renderer.material.color = obstacleColor;
             }
 
             // 슬라이딩 가능 여부 로깅

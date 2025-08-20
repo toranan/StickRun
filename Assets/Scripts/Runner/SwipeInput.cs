@@ -12,6 +12,13 @@ namespace BananaRun.Runner
         [Tooltip("스와이프 허용 최대 시간(초)")]
         public float maxSwipeTime = 0.6f;
 
+        [Header("Tap Settings")]
+        [Tooltip("탭으로 간주할 최대 시간(초)")]
+        public float maxTapTime = 0.3f;
+        [Tooltip("탭으로 간주할 최대 픽셀 이동 거리")]
+        public float maxTapDistancePixels = 30f;
+
+
         public event Action OnSwipeUp;
         public event Action OnSwipeDown;
         public event Action OnSwipeLeft;
@@ -19,7 +26,7 @@ namespace BananaRun.Runner
 
         private Vector2 _startPos;
         private float _startTime;
-        private bool _isSwiping;
+        private bool _isInputStarted;
 
         private void Update()
         {
@@ -38,19 +45,34 @@ namespace BananaRun.Runner
             Touch touch = Input.GetTouch(0);
             if (touch.phase == TouchPhase.Began)
             {
-                _isSwiping = true;
+                _isInputStarted = true;
                 _startPos = touch.position;
                 _startTime = Time.time;
             }
-            else if (_isSwiping && (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled))
+            else if (_isInputStarted && (touch.phase == TouchPhase.Ended || touch.phase == TouchPhase.Canceled))
             {
-                _isSwiping = false;
+                _isInputStarted = false;
                 float elapsed = Time.time - _startTime;
                 Vector2 delta = touch.position - _startPos;
 
-                if (elapsed <= maxSwipeTime && delta.magnitude >= minSwipeDistancePixels)
+                // 탭 감지
+                if (elapsed <= maxTapTime && delta.magnitude < maxTapDistancePixels)
                 {
-                    DetectDirection(delta);
+                    if (_startPos.x < Screen.width / 2)
+                    {
+                        Debug.Log("🟡 왼쪽 탭 감지");
+                        OnSwipeLeft?.Invoke();
+                    }
+                    else
+                    {
+                        Debug.Log("🟡 오른쪽 탭 감지");
+                        OnSwipeRight?.Invoke();
+                    }
+                }
+                // 스와이프 감지
+                else if (elapsed <= maxSwipeTime && delta.magnitude >= minSwipeDistancePixels)
+                {
+                    DetectSwipeDirection(delta);
                 }
             }
 #endif
@@ -81,20 +103,11 @@ namespace BananaRun.Runner
 #endif
         }
 
-        private void DetectDirection(Vector2 delta)
+        private void DetectSwipeDirection(Vector2 delta)
         {
             if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
             {
-                if (delta.x > 0f) 
-                {
-                    Debug.Log("🟡 오른쪽 스와이프 감지 → 1레인 이동");
-                    OnSwipeRight?.Invoke(); 
-                }
-                else 
-                {
-                    Debug.Log("🟡 왼쪽 스와이프 감지 → 1레인 이동");
-                    OnSwipeLeft?.Invoke();
-                }
+                // Horizontal swipes are now ignored
             }
             else
             {
@@ -118,5 +131,3 @@ namespace BananaRun.Runner
         public void TriggerSwipeDown() => OnSwipeDown?.Invoke();
     }
 }
-
-

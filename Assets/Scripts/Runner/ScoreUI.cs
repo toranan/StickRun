@@ -7,9 +7,9 @@ namespace BananaRun.Runner
     public class ScoreUI : MonoBehaviour
     {
         [Header("Style")]
-        public int fontSize = 36;
+        public int fontSize = 100;
         public Color fontColor = Color.white;
-        public Vector2 margin = new Vector2(16f, 16f); // 좌, 상 여백(px)
+        public Vector2 margin = new Vector2(60f, 16f); // 좌, 상 여백(px)
 
         private Text _text;
         private RectTransform _rect;
@@ -63,7 +63,16 @@ namespace BananaRun.Runner
             _rect.pivot = new Vector2(0f, 1f);
 
             _text = textGO.AddComponent<Text>();
-            _text.font = Resources.GetBuiltinResource<Font>("Arial.ttf");
+            Font loadedFont = Resources.Load<Font>("Cafe24PROUP");
+            if (loadedFont != null)
+            {
+                _text.font = loadedFont;
+            }
+            else
+            {
+                Debug.LogError("Failed to load font: Cafe24PROUP. Make sure it's in the Resources folder.");
+                _text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); // Fallback
+            }
             _text.fontSize = fontSize;
             _text.color = fontColor;
             _text.alignment = TextAnchor.UpperLeft;
@@ -88,5 +97,3 @@ namespace BananaRun.Runner
         }
     }
 }
-
-
