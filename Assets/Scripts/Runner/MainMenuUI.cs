@@ -47,11 +47,6 @@ namespace BananaRun.Runner
                 {
                     startButtonPanel.SetActive(false);
                 }
-                // 카운트다운/점수 텍스트 보이기
-                if (countdownScoreText != null)
-                {
-                    countdownScoreText.gameObject.SetActive(true);
-                }
             }
         }
     }

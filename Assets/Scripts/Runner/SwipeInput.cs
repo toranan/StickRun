@@ -169,7 +169,14 @@ namespace BananaRun.Runner
         {
             if (Mathf.Abs(delta.x) > Mathf.Abs(delta.y))
             {
-                // Horizontal swipes are ignored
+                if (delta.x > 0f)
+                {
+                    OnSwipeRight?.Invoke();
+                }
+                else
+                {
+                    OnSwipeLeft?.Invoke();
+                }
             }
             else
             {
