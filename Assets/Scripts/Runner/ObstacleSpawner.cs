@@ -71,7 +71,7 @@ namespace BananaRun.Runner
                 if (playerObj != null) player = playerObj.transform;
             }
 
-            _nextSpawnZ = 10f;
+            _nextSpawnZ = 100f; // 기존 10f에서 증가
             _gameStartTime = Time.time;
         }
 
